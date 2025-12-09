@@ -1,7 +1,15 @@
 let bookmark = null;
 let lastJumpWasToBookmark = false;
 
-// Prevent Chrome middle-click auto-scroll
+let leftClickDown = false;
+let rightClickDown = false;
+
+// Prevent default context menu so right + left works cleanly
+document.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+}, true);
+
+// Prevent Chrome auto-scroll on middle click
 document.addEventListener("mousedown", (e) => {
     if (e.button === 1) {
         e.preventDefault();
@@ -9,13 +17,11 @@ document.addEventListener("mousedown", (e) => {
     }
 }, true);
 
-// Strong ChatGPT scroll container detector
+// Detect ChatGPT scroll container
 function getChatContainer() {
-    // Try official ChatGPT containers first
     let box = document.querySelector("main .overflow-y-auto, main div[slot='messages']");
     if (box) return box;
 
-    // Automatic fallback: find largest scrollable DIV
     let candidates = Array.from(document.querySelectorAll("div"))
         .filter(d => d.scrollHeight > d.clientHeight + 50);
 
@@ -27,39 +33,55 @@ function getChatContainer() {
     return null;
 }
 
-// Middle-click handler
-document.addEventListener("mouseup", (e) => {
-    if (e.button !== 1) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
+// Create bookmark
+function createBookmark() {
     const box = getChatContainer();
-    if (!box) {
-        showToast("❗ Chat container not found");
-        return;
-    }
+    if (!box) return;
 
-    // CASE 1 — Bookmark not set yet
-    if (bookmark === null) {
-        bookmark = box.scrollTop;
-        showToast("📌 Bookmark set!");
-        return;
-    }
+    bookmark = box.scrollTop;
+    lastJumpWasToBookmark = false;
 
-    // CASE 2 — Toggle jumping
-    if (lastJumpWasToBookmark) {
-        box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
-        lastJumpWasToBookmark = false;
-        showToast("⬇️ Jumped to bottom");
-    } else {
-        box.scrollTo({ top: bookmark, behavior: "smooth" });
-        lastJumpWasToBookmark = true;
-        showToast("📍 Jumped to bookmark");
+    showToast("📌 NEW Bookmark Set!");
+}
+
+// Track button presses
+document.addEventListener("mousedown", (e) => {
+    if (e.button === 0) leftClickDown = true;     // Left
+    if (e.button === 2) rightClickDown = true;    // Right
+
+    // If both pressed at same time → new bookmark
+    if (leftClickDown && rightClickDown) {
+        createBookmark();
     }
 }, true);
 
-// Toast popup function
+document.addEventListener("mouseup", (e) => {
+    if (e.button === 0) leftClickDown = false;
+    if (e.button === 2) rightClickDown = false;
+
+    // Middle-click handler (jumping)
+    if (e.button === 1) {
+        const box = getChatContainer();
+        if (!box) return;
+
+        if (bookmark === null) {
+            createBookmark();
+            return;
+        }
+
+        if (lastJumpWasToBookmark) {
+            box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
+            lastJumpWasToBookmark = false;
+            showToast("⬇️ Bottom");
+        } else {
+            box.scrollTo({ top: bookmark, behavior: "smooth" });
+            lastJumpWasToBookmark = true;
+            showToast("📍 Jumped to Bookmark");
+        }
+    }
+}, true);
+
+// Toast popup
 function showToast(text) {
     const toast = document.createElement("div");
     toast.innerText = text;
@@ -81,7 +103,6 @@ function showToast(text) {
     document.body.appendChild(toast);
 
     setTimeout(() => (toast.style.opacity = "1"), 10);
-
     setTimeout(() => {
         toast.style.opacity = "0";
         setTimeout(() => toast.remove(), 300);
